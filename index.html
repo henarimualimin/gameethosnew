@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Endless Runner</title>
+    <!-- Memuat Tailwind CSS untuk styling halaman -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f0f0f0;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Mencegah scrolling */
+        }
+        canvas {
+            background-color: #87CEEB; /* Warna langit biru */
+            border-radius: 1rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            border: 5px solid #fff;
+            width: 100%;
+            height: 100%;
+        }
+        .game-container {
+            width: 95vw; /* Ukuran game lebih besar */
+            max-width: 1200px; /* Ukuran game lebih besar */
+            height: 80vh; /* Ukuran game lebih besar */
+            max-height: 900px; /* Ukuran game lebih besar */
+        }
+        .banner-container {
+            width: 100%;
+            max-width: 1000px;
+            height: 8rem; /* Ukuran banner dikecilkan */
+            overflow: hidden;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        .message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            display: none; /* Sembunyikan secara default */
+            z-index: 10;
+        }
+        .message-box h2 {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        .message-box p {
+            font-size: 1.2rem;
+        }
+        /* Custom styling untuk logo X dan username */
+        .twitter-logo-container {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 5;
+        }
+        .twitter-logo-container .logo-icon {
+            height: 1.5rem;
+            width: 1.5rem;
+            fill: white;
+        }
+        .twitter-logo-container span {
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-blue-200">
+    <div class="flex flex-col items-center justify-center space-y-4 p-4 md:p-8 relative">
+        <!-- Kontainer dengan tinggi yang dibatasi untuk gambar banner -->
+        <div class="banner-container">
+            <!-- Banner lokal yang Anda sebutkan -->
+            <img src="banner-game.jpg" alt="Banner Game Keren" class="w-full h-full object-cover">
+        </div>
+        <div class="game-container relative">
+            <!-- Kontainer untuk logo X dan username -->
+            <div class="twitter-logo-container">
+                <!-- Menggunakan SVG inline untuk logo X agar selalu tampil -->
+                <svg viewBox="0 0 24 24" aria-hidden="true" class="logo-icon">
+                    <g>
+                        <path d="M18.244 2.25h3.308l-7.227 8.26L21.6 18h-2.327l-5.385-6.166L9.625 18H5.66l7.35-8.409L5.45 2.25H8.81L13.714 8.52 18.244 2.25zm-2.885 15.405l.076.082H14.1l-4.918-6.95L5.617 2.564h2.24L12.582 9.05l4.877 8.6Z"></path>
+                    </g>
+                </svg>
+                <span>@Ethereum_OS</span>
+            </div>
+            <canvas id="gameCanvas"></canvas>
+        </div>
+    </div>
+    
+    <div id="messageBox" class="message-box">
+        <h2 id="messageTitle">Game Over!</h2>
+        <p id="messageText">Tekan tombol apa saja untuk mulai ulang.</p>
+    </div>
+
+    <script>
+        window.onload = function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const messageBox = document.getElementById('messageBox');
+
+            // State game
+            let isRunning = false;
+            let isGameStarted = false; // Flag untuk melacak apakah game sudah dimulai
+            let score = 0; // Inisialisasi skor
+            let player;
+            let platforms = [];
+            let collectibles = []; // Array untuk item yang bisa dikumpulkan
+            let playerImage = new Image();
+            let targetImage = new Image();
+            let collectibleImage = new Image(); // Objek gambar untuk item poin
+
+            // PENTING: Pastikan semua file gambar ini berada di folder yang sama dengan file index.html
+            // dan periksa kembali apakah ekstensi file (.jpg atau .png) sudah benar.
+            const images = [
+                // Pemain menggunakan file yang Anda unggah
+                { obj: playerImage, src: 'lego-runner-removebg-preview.png' }, 
+                // Target menggunakan file yang Anda unggah
+                { obj: targetImage, src: 'dims.png' }, 
+                // Item yang dikumpulkan menggunakan file yang Anda unggah
+                { obj: collectibleImage, src: 'image_7cbec6.jpg' } 
+            ];
+
+            // Memastikan canvas berukuran penuh dari container
+            function resizeCanvas() {
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = canvas.parentElement.clientHeight;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // Konstanta dan variabel permainan
+            const gravity = 0.5;
+            const jumpForce = -12;
+            const defaultPlayerSpeed = 3;
+            const playerAcceleration = 0.2;
+            let scrollOffset = 0;
+            const targetSize = 80; // Ukuran target
+            const targetX = canvas.width - 100; // Posisi x target di layar (relatif terhadap kanvas)
+            const collectibleSize = 80; // Ukuran item poin diperbesar 2x lipat
+            const collectibleOffset = 10; // Jarak item dari platform
+
+            // Menggambar objek di canvas dengan scrolling
+            function drawObject(obj, x, y, width, height, color) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x - scrollOffset, y, width, height);
+            }
+
+            // Objek pemain
+            function createPlayer() {
+                return {
+                    x: canvas.width / 4, // Posisi x pemain di layar tetap
+                    y: 50,
+                    width: 80, // Ukuran karakter
+                    height: 80, // Ukuran karakter
+                    velocityY: 0,
+                    velocityX: defaultPlayerSpeed,
+                    isGrounded: false
+                };
+            }
+            
+            // Fungsi untuk membuat platform baru yang dioptimalkan
+            function createNewPlatform(lastPlatform) {
+                const maxJumpDistance = player.velocityX * (2 * Math.abs(jumpForce) / gravity);
+                const minGap = 50;
+                const maxGap = Math.min(maxJumpDistance * 0.9, 200);
+                const gap = Math.random() * (maxGap - minGap) + minGap;
+                const minWidth = 100;
+                const maxWidth = 250;
+                const newWidth = Math.random() * (maxWidth - minWidth) + minWidth;
+                const upperPathY = canvas.height - 150;
+                const lowerPathY = canvas.height - 50;
+                let newY;
+
+                if (Math.random() < 0.25) {
+                    newY = (lastPlatform.y === lowerPathY) ? upperPathY : lowerPathY;
+                } else {
+                    newY = lastPlatform.y;
+                }
+                
+                const newPlatform = { 
+                    x: lastPlatform.x + lastPlatform.width + gap, 
+                    y: newY, 
+                    width: newWidth, 
+                    height: 20, 
+                    color: '#B8860B' 
+                };
+
+                // Tambahkan item poin dengan kemungkinan 20%
+                if (Math.random() < 0.2) {
+                    // Pastikan platform cukup lebar untuk item
+                    if (newWidth > collectibleSize + collectibleOffset * 2) { 
+                        const collectibleX = newPlatform.x + newWidth / 2 - collectibleSize / 2;
+                        collectibles.push({
+                            x: collectibleX,
+                            y: newY - collectibleSize,
+                            width: collectibleSize,
+                            height: collectibleSize,
+                            collected: false // Status apakah sudah dikumpulkan
+                        });
+                    }
+                }
+
+                return newPlatform;
+            }
+
+            // Inisialisasi game
+            function initGame() {
+                player = createPlayer();
+                platforms = [];
+                collectibles = [];
+                score = 0; // Reset skor
+                // Buat platform awal yang panjang di jalur bawah agar pemain bisa memulai dengan mudah
+                platforms.push({ x: 0, y: canvas.height - 50, width: canvas.width * 2, height: 30, color: '#228B22' });
+
+                // Mulai membuat platform-platform lain di depannya
+                let lastPlatform = platforms[0];
+                for (let i = 0; i < 5; i++) {
+                    lastPlatform = createNewPlatform(lastPlatform);
+                    platforms.push(lastPlatform);
+                }
+                scrollOffset = 0;
+            }
+
+            // Fungsi utama game loop
+            function gameLoop() {
+                if (isRunning) {
+                    update();
+                    draw();
+                } else {
+                    // Hanya menggambar saat game dihentikan (untuk menampilkan pesan Game Over)
+                    draw();
+                }
+                requestAnimationFrame(gameLoop);
+            }
+
+            // Memperbarui posisi dan status game
+            function update() {
+                // Terapkan gravitasi
+                player.velocityY += gravity;
+                player.y += player.velocityY;
+
+                // Scrolling otomatis dan kontrol kecepatan
+                let currentSpeed = defaultPlayerSpeed;
+                if (keys['ArrowRight']) {
+                    currentSpeed += playerAcceleration;
+                }
+                if (keys['ArrowLeft']) {
+                    currentSpeed -= playerAcceleration;
+                }
+                scrollOffset += currentSpeed;
+                
+                // Jika pemain jatuh dari layar, tampilkan pesan
+                if (player.y > canvas.height) {
+                    messageBox.style.display = 'block';
+                    isRunning = false;
+                    isGameStarted = false; // Reset flag game started
+                    return;
+                }
+                
+                // Reset status terhantam
+                player.isGrounded = false;
+
+                // Periksa tabrakan dengan platform
+                platforms.forEach(platform => {
+                    const platformOnScreenX = platform.x - scrollOffset;
+                    if (
+                        player.x < platformOnScreenX + platform.width &&
+                        player.x + player.width > platformOnScreenX &&
+                        player.y + player.height < platform.y + platform.height &&
+                        player.y + player.height > platform.y &&
+                        player.velocityY >= 0
+                    ) {
+                        player.y = platform.y - player.height; 
+                        player.velocityY = 0; 
+                        player.isGrounded = true; 
+                    }
+                });
+
+                // Periksa tabrakan dengan item poin
+                collectibles.forEach(collectible => {
+                    const collectibleOnScreenX = collectible.x - scrollOffset;
+                    if (
+                        !collectible.collected && // Hanya periksa jika belum dikumpulkan
+                        player.x < collectibleOnScreenX + collectible.width &&
+                        player.x + player.width > collectibleOnScreenX &&
+                        player.y < collectible.y + collectible.height &&
+                        player.y + player.height > collectible.y
+                    ) {
+                        score++; // Tambah skor
+                        collectible.collected = true; // Tandai sudah dikumpulkan
+                    }
+                });
+                
+                // Hapus item poin yang sudah dikumpulkan atau sudah tidak terlihat
+                collectibles = collectibles.filter(item => !item.collected && (item.x + item.width > scrollOffset));
+
+                // Generasi platform dinamis
+                const lastPlatform = platforms[platforms.length - 1];
+                if (lastPlatform.x - scrollOffset < canvas.width) {
+                    const newPlatform = createNewPlatform(lastPlatform);
+                    platforms.push(newPlatform);
+                }
+
+                // Hapus platform yang sudah tidak terlihat
+                if (platforms.length > 0 && platforms[0].x + platforms[0].width < scrollOffset) {
+                    platforms.shift();
+                }
+            }
+
+            // Menggambar semua elemen game
+            function draw() {
+                // Hapus canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Gambar semua platform
+                platforms.forEach(platform => {
+                    drawObject(platform, platform.x, platform.y, platform.width, platform.height, platform.color);
+                });
+
+                // Gambar target di posisi tetap di layar
+                if (targetImage.complete && targetImage.naturalWidth !== 0) {
+                    ctx.drawImage(targetImage, targetX, canvas.height - 50 - targetSize, targetSize, targetSize);
+                }
+                
+                // Gambar item poin yang belum dikumpulkan
+                collectibles.forEach(collectible => {
+                    const collectibleOnScreenX = collectible.x - scrollOffset;
+                    if (collectibleImage.complete && collectibleImage.naturalWidth !== 0) {
+                         ctx.drawImage(collectibleImage, collectibleOnScreenX, collectible.y, collectible.width, collectible.height);
+                    } else {
+                        // Fallback jika gambar gagal dimuat
+                        ctx.fillStyle = '#FFD700'; 
+                        ctx.fillRect(collectibleOnScreenX, collectible.y, collectible.width, collectible.height);
+                    }
+                });
+
+                // Gambar pemain
+                if (playerImage.complete && playerImage.naturalWidth !== 0) {
+                    ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+                } else {
+                    ctx.fillStyle = '#FF6347'; 
+                    ctx.fillRect(player.x, player.y, player.width, player.height);
+                }
+                
+                // Gambar skor di pojok kanan atas
+                ctx.fillStyle = 'black'; // Mengubah warna teks menjadi hitam
+                ctx.font = 'bold 24px Inter, sans-serif'; // Mengubah font menjadi tebal
+                ctx.textAlign = 'right';
+                ctx.fillText(`Received Code: ${score}`, canvas.width - 20, 40);
+            }
+            
+            // Event listener untuk input keyboard
+            const keys = {};
+            document.addEventListener('keydown', (e) => {
+                // Perbaikan bug: mencegah lompatan berulang saat tombol spasi ditahan
+                if (e.key === ' ' && player.isGrounded && !e.repeat) {
+                    player.velocityY = jumpForce;
+                    player.isGrounded = false;
+                }
+                
+                keys[e.key] = true;
+                if (!isGameStarted) {
+                    initGame();
+                    isRunning = true;
+                    isGameStarted = true;
+                    messageBox.style.display = 'none';
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                keys[e.key] = false;
+            });
+
+            // Memuat semua gambar sebelum memulai game
+            let imagesLoaded = 0;
+            function onImageLoad() {
+                imagesLoaded++;
+                if (imagesLoaded === images.length) {
+                    initGame();
+                    gameLoop();
+                }
+            }
+            images.forEach(img => {
+                img.obj.onload = onImageLoad;
+                img.obj.onerror = () => {
+                    console.error(`Gagal memuat gambar dari URL: ${img.src}`);
+                    onImageLoad(); // Lanjutkan meskipun ada kesalahan
+                };
+                img.obj.src = img.src;
+            });
+        };
+    </script>
+</body>
+</html>
